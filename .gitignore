@@ -1,0 +1,54 @@
+# Python
+.venv/
+venv/
+ENV/
+env/
+*__pycache__/
+*__init__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.main
+.env.poc-k-water
+
+# IDEs
+.idea/
+.vscode/
+.DS_Store
+.claude/settings.local.json
+
+# Windows special files (Claude Code artifact)
+nul
+
+# Oracle
+/instantclient-basic-linux.x64-23.9.0.25.07.zip
+**/oracle_inst/**
+
+# Application specific
+evaluation_results/**
+log/
+logs/
+*.log
+
+# Podman/Docker deployment
+podman-images/
+*.tar
+zettos-podman-bundle_*.tar.gz
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*__init__.py
+
+# Docs RAG - 문서 파일 저장소 (운영/테스트용, images 폴더 포함)
+docs_file/
+
+# Claude Code 임시 파일
+tmpclaude-*
+*__pycache__*
