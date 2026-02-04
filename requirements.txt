@@ -1,3 +1,22 @@
-fastapi>=0.109.0
-uvicorn[standard]>=0.27.0
-psutil>=5.9.0
+# Rollup Board Game Platform - Backend
+# FastAPI + Python
+
+# Core dependencies
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+supabase==2.3.0
+firebase-admin==6.4.0
+
+# Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+
+# Utilities
+httpx==0.26.0
+psutil==5.9.8
