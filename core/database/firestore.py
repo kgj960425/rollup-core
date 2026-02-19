@@ -139,7 +139,7 @@ class MockDocumentReference:
             try:
                 callback(snapshot, None, None)
             except Exception as e:
-                print(f"⚠️  리스너 에러: {e}")
+                print("[Firestore] listener error: " + str(e))
 
 
 class MockQuery:
@@ -278,7 +278,7 @@ class MockFirestoreClient:
     
     def __init__(self):
         self.data_store: Dict[str, Dict[str, Dict]] = {}
-        print("✓ Mock Firestore 클라이언트 초기화 (메모리 모드)")
+        print("[Firestore] Mock client initialized (memory mode)")
     
     def collection(self, collection_name: str) -> MockCollectionReference:
         """컬렉션 참조"""
@@ -299,7 +299,7 @@ class MockFirestoreClient:
     def _clear_all(self):
         """모든 데이터 삭제 (테스트용)"""
         self.data_store.clear()
-        print("✓ Mock Firestore 데이터 전체 삭제")
+        print("[Firestore] Mock data cleared")
 
 
 # 실제 Firebase 연결 시도 (환경변수 있으면)
@@ -315,19 +315,19 @@ try:
             cred = credentials.Certificate(service_account_dict)
             firebase_admin.initialize_app(cred)
             db = real_firestore.client()
-            print("✓ 실제 Firebase 연결 성공")
+            print("[Firestore] Connected to real Firebase")
         except Exception as e:
-            print(f"⚠️  Firebase 연결 실패, Mock 모드로 전환: {e}")
+            print("[Firestore] Connection failed, switching to mock: " + str(e))
             db = MockFirestoreClient()
     elif firebase_admin._apps:
         db = real_firestore.client()
-        print("✓ 실제 Firebase 이미 초기화됨")
+        print("[Firestore] Firebase already initialized, using real Firestore")
     else:
-        print("⚠️  Firebase 환경변수 미설정, Mock 모드 사용")
+        print("[Firestore] Env var not set, using mock mode")
         db = MockFirestoreClient()
-        
+
 except ImportError:
-    print("⚠️  firebase-admin 패키지 없음, Mock 모드 사용")
+    print("[Firestore] firebase-admin not installed, using mock mode")
     db = MockFirestoreClient()
 
 

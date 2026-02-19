@@ -32,12 +32,12 @@ app.add_middleware(
 )
 
 # 라우터 등록
-from routes import lobby
+from routes import lobby, auth
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(lobby.router, prefix="/api/lobby", tags=["Lobby"])
 
 # 추후 추가 예정
-# from routes import auth, game, shop, plugins
-# app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+# from routes import game, shop, plugins
 # app.include_router(game.router, prefix="/api/game", tags=["Game"])
 # app.include_router(shop.router, prefix="/api/shop", tags=["Shop"])
 # app.include_router(plugins.router, prefix="/api/plugins", tags=["Plugins"])
@@ -56,7 +56,10 @@ async def root():
 async def health_check():
     """상세 헬스체크"""
     from core.database.supabase import get_connection_info
+    import firebase_admin
+
     db_info = get_connection_info()
+    firebase_status = "connected" if firebase_admin._apps else "not_configured"
 
     return {
         "status": "healthy",
@@ -64,7 +67,7 @@ async def health_check():
             "supabase": db_info["status"],
             "is_mock": db_info["is_mock"]
         },
-        "firebase": "not_configured"  # 추후 Firebase 연동 시 업데이트
+        "firebase": firebase_status,
     }
 
 if __name__ == "__main__":

@@ -233,7 +233,7 @@ class MockSupabaseClient:
     
     def __init__(self):
         self.data_store: Dict[str, List[Dict]] = {}
-        print("✓ Mock Supabase 클라이언트 초기화 (메모리 모드)")
+        print("[Supabase] Mock client initialized (memory mode)")
     
     def table(self, table_name: str) -> MockQueryBuilder:
         """테이블 선택"""
@@ -245,7 +245,7 @@ class MockSupabaseClient:
     
     def rpc(self, function_name: str, params: Dict = None):
         """RPC 함수 호출 (Mock에서는 미지원)"""
-        print(f"⚠️  RPC 호출은 Mock에서 지원하지 않음: {function_name}")
+        print("[Supabase] RPC not supported in mock mode: " + str(function_name))
         return MockResponse([])
     
     # 디버그용: 현재 저장된 데이터 확인
@@ -263,7 +263,7 @@ class MockSupabaseClient:
     def _clear_all(self):
         """모든 데이터 삭제 (테스트용)"""
         self.data_store.clear()
-        print("✓ Mock Supabase 데이터 전체 삭제")
+        print("[Supabase] Mock data cleared")
 
 
 # ===== dotenv 자동 로드 =====
@@ -284,17 +284,15 @@ if SUPABASE_URL not in _PLACEHOLDER_VALUES and SUPABASE_KEY not in _PLACEHOLDER_
         from supabase import create_client
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
         is_mock = False
-        print(f"✓ 실제 Supabase 연결 성공 ({SUPABASE_URL[:40]}...)")
+        print("[Supabase] Connected to real Supabase (" + SUPABASE_URL[:40] + "...)")
     except ImportError:
-        print("⚠️  supabase 패키지 미설치, Mock 모드로 전환")
-        print("   → pip install supabase 실행 필요")
+        print("[Supabase] Package not installed, switching to mock mode")
         supabase = MockSupabaseClient()
     except Exception as e:
-        print(f"⚠️  Supabase 연결 실패, Mock 모드로 전환: {e}")
+        print("[Supabase] Connection failed, switching to mock mode: " + str(e))
         supabase = MockSupabaseClient()
 else:
-    print("⚠️  Supabase 환경변수 미설정 또는 placeholder 값, Mock 모드 사용")
-    print("   → .env 파일에 실제 SUPABASE_URL, SUPABASE_KEY 설정 필요")
+    print("[Supabase] Env vars not set, using mock mode")
     supabase = MockSupabaseClient()
 
 
