@@ -39,6 +39,11 @@ ENV/
 .env.local
 .env.production
 
+# Firebase 서비스 계정 키 (절대 Git에 올리지 말 것)
+serviceAccountKey.json
+*serviceAccount*.json
+rollup-e11ce*.json
+
 # Logs
 *.log
 
