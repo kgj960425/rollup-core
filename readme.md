@@ -2,6 +2,8 @@
 
 3D 멀티플레이어 턴제 보드게임 플랫폼 - FastAPI 백엔드
 
+**현재 진행률:** 85% | **게임:** 2개 (오목, 야추) | **API:** 28개
+
 ## 기술 스택
 
 - **Framework**: FastAPI
@@ -57,57 +59,90 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 서버 실행 후: http://localhost:8000/docs 에서 API 문서 확인
 
+## ✨ 주요 기능
+
+- ✅ **인증 시스템** - Firebase JWT 인증
+- ✅ **로비 시스템** - 실시간 동기화, 채팅 포함
+- ✅ **게임 시스템** - 플러그인 아키텍처, 2개 게임 구현
+- ✅ **상점 시스템** - 아이템 구매, 인벤토리
+- ✅ **플러그인 시스템** - 게임 메타데이터, 통계
+
+## 🎮 구현된 게임
+
+1. **오목 (Gomoku)** - 2인, 15x15 보드, 5개 연속 승리
+2. **야추 (Yacht)** - 1-4인, 주사위 5개, 12개 카테고리
+
 ## 프로젝트 구조
 
 ```
 rollup-core/
-├── main.py              # FastAPI 앱 진입점
-├── requirements.txt     # Python 패키지
-├── .env                # 환경변수 (gitignore)
+├── main.py                      ✅ FastAPI 서버
+├── requirements.txt
+├── .env
 │
-├── core/               # 핵심 기능
-│   ├── database/       # 데이터베이스 연결
-│   │   ├── supabase.py
-│   │   └── firestore.py
-│   ├── services/       # 비즈니스 로직
-│   └── middleware/     # 미들웨어 (인증 등)
+├── core/
+│   ├── database/               ✅ Mock DB + Firebase
+│   ├── middleware/             ✅ JWT 인증
+│   └── services/               ✅ 비즈니스 로직
+│       ├── lobby_service.py
+│       └── game_service.py
 │
-├── games/              # 게임 플러그인
-│   ├── base.py         # 게임 인터페이스
-│   ├── __init__.py     # 게임 레지스트리
-│   ├── lexio/         # 렉시오 게임
-│   └── yacht/         # 야추 게임
+├── games/                       ✅ 게임 플러그인 (2개)
+│   ├── base.py
+│   ├── __init__.py
+│   ├── gomoku/                 ✅ 오목
+│   └── yacht/                  ✅ 야추
 │
-└── routes/             # API 라우트
-    ├── auth.py         # 인증
-    ├── lobby.py        # 로비
-    ├── game.py         # 게임
-    ├── shop.py         # 상점
-    └── plugins.py      # 플러그인
+└── routes/                      ✅ API 라우터 (5개)
+    ├── auth.py                  ✅ 3 endpoints
+    ├── lobby.py                 ✅ 7 endpoints
+    ├── game.py                  ✅ 5 endpoints
+    ├── shop.py                  ✅ 6 endpoints
+    └── plugins.py               ✅ 4 endpoints
 ```
 
-## API 엔드포인트
+## 📚 API 엔드포인트 (28개)
 
-### 인증
-- `POST /api/auth/verify` - JWT 토큰 검증
+### 기본 (2개)
+- `GET /` - 헬스체크
+- `GET /api/health` - 상세 헬스체크 (DB, 게임 목록)
 
-### 로비
-- `POST /api/lobby/create` - 방 생성
-- `POST /api/lobby/join` - 방 입장
-- `POST /api/lobby/ready` - 준비
-- `POST /api/lobby/start` - 게임 시작
+### 인증 (3개)
+- `GET /api/auth/public` - 인증 불필요 (테스트)
+- `GET /api/auth/protected` - JWT 인증 테스트
+- `GET /api/auth/me` - 현재 사용자 정보
 
-### 게임
-- `POST /api/game/{game_type}/action` - 액션 처리
-- `POST /api/game/{game_type}/end-turn` - 턴 종료
+### 로비 (7개)
+- `POST /api/lobby/create` - 로비 생성
+- `POST /api/lobby/{id}/join` - 입장
+- `POST /api/lobby/{id}/leave` - 퇴장
+- `POST /api/lobby/{id}/ready` - 준비 토글
+- `POST /api/lobby/{id}/start` - 게임 시작
+- `POST /api/lobby/{id}/chat` - 채팅 전송
+- `GET /api/lobby/{id}` - 로비 정보
 
-### 상점
+### 게임 (5개)
+- `POST /api/game/{type}/{id}/action` - 액션 처리
+- `GET /api/game/{id}` - 게임 상태
+- `GET /api/game/{id}/history` - 액션 히스토리
+- `POST /api/game/{id}/abandon` - 게임 포기
+- `POST /api/game/{type}/create` - 직접 생성 (테스트)
+
+### 상점 (6개)
+- `GET /api/shop/categories` - 카테고리 목록
 - `GET /api/shop/items` - 아이템 목록
+- `GET /api/shop/featured` - 추천 아이템
 - `POST /api/shop/purchase` - 아이템 구매
+- `GET /api/shop/inventory` - 인벤토리
+- `GET /api/shop/balance` - 재화 조회
 
-### 플러그인
-- `GET /api/plugins/available` - 사용 가능한 게임
-- `GET /api/plugins/{game_type}/manifest` - 게임 매니페스트
+### 플러그인 (4개)
+- `GET /api/plugins/available` - 게임 목록
+- `GET /api/plugins/{type}/manifest` - 게임 매니페스트
+- `POST /api/plugins/{type}/track-install` - 설치 추적
+- `GET /api/plugins/{type}/stats` - 게임 통계
+
+**자세한 API 문서:** http://localhost:8000/docs
 
 ## 새 게임 추가하기
 

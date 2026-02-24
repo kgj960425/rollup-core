@@ -35,15 +35,12 @@ app.add_middleware(
 import games  # 게임 자동 등록
 
 # 라우터 등록
-from routes import lobby, auth, game
+from routes import lobby, auth, game, shop, plugins
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(lobby.router, prefix="/api/lobby", tags=["Lobby"])
 app.include_router(game.router, prefix="/api/game", tags=["Game"])
-
-# 추후 추가 예정
-# from routes import shop, plugins
-# app.include_router(shop.router, prefix="/api/shop", tags=["Shop"])
-# app.include_router(plugins.router, prefix="/api/plugins", tags=["Plugins"])
+app.include_router(shop.router, prefix="/api/shop", tags=["Shop"])
+app.include_router(plugins.router, prefix="/api/plugins", tags=["Plugins"])
 
 @app.get("/")
 async def root():
