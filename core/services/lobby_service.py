@@ -348,23 +348,15 @@ class LobbyService:
         # 시작 가능 여부 확인
         if not await LobbyService.can_start_game(lobby_id):
             raise ValueError("모든 플레이어가 준비해야 합니다")
-        
-        # 게임 ID 생성
-        game_id = str(uuid.uuid4())
-        
-        # active_games 컬렉션에 게임 생성 (기본 구조만)
-        # 실제 게임 로직은 game_service에서 처리
-        game_data = {
-            'gameId': game_id,
-            'lobbyId': lobby_id,
-            'gameType': lobby_data['gameType'],
-            'players': lobby_data['players'],
-            'status': 'in_progress',
-            'createdAt': datetime.now().isoformat(),
-            'updatedAt': datetime.now().isoformat()
-        }
-        
-        db.collection('active_games').document(game_id).set(game_data)
+
+        # GameService를 사용하여 게임 생성
+        from core.services.game_service import GameService
+
+        game_id = await GameService.create_game(
+            game_type=lobby_data['gameType'],
+            players=lobby_data['players'],
+            settings={}
+        )
         
         # 로비 상태 업데이트
         lobby_ref.update({
