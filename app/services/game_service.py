@@ -1,137 +1,205 @@
-"""게임 액션 처리 오케스트레이션."""
+"""
+게임 시작 / 액션 처리 / 종료 서비스.
+
+start_game: 호스트가 시작 → 게임 엔진 init → game_states INSERT → rooms.status='playing'
+apply_action: 플레이어 액션 → 룰 엔진 → state UPDATE (+ 종료 체크)
+"""
+
 from typing import Any
 
-from app.core.exceptions import (
-    GameAlreadyStartedError,
-    GameNotFoundError,
-    InvalidActionError,
-    NotYourTurnError,
-)
-from app.core.rng import generate_seed
-from app.core.supabase_client import get_supabase
-from app.games.registry import get_game
-from app.services.room_service import get_player_seat, get_room, get_room_players
+from fastapi import HTTPException
+from supabase import Client
+
+from app.games.base import InvalidActionError
+from app.games.registry import get_engine, is_supported
+from app.services import room_service
 
 
-def start_game(room_id: str, requester_id: str) -> dict:
-    """게임 시작 (호스트만 가능)."""
-    sb = get_supabase()
-    room = get_room(room_id)
+class GameError(Exception):
+    """게임 관련 비즈니스 에러. status_code 포함."""
 
-    if room["host_id"] != requester_id:
-        raise InvalidActionError("호스트만 게임을 시작할 수 있습니다.")
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+def game_error_to_http(err: GameError) -> HTTPException:
+    return HTTPException(status_code=err.status_code, detail=err.message)
+
+
+# ============================================================================
+# 시작
+# ============================================================================
+
+
+def start_game(
+    supabase: Client,
+    *,
+    room_id: str,
+    user_id: str,
+) -> dict[str, Any]:
+    """
+    게임 시작.
+
+    검증: 룸 존재 + waiting / 호스트 / 모두 ready / 최소 2명 / 백엔드 지원
+    동작: engine.init_state → game_states UPSERT → rooms UPDATE
+    """
+    room = room_service.get_room(supabase, room_id)
+    if not room:
+        raise GameError("존재하지 않는 룸입니다", 404)
     if room["status"] != "waiting":
-        raise GameAlreadyStartedError("이미 시작된 게임입니다.")
+        raise GameError("이미 시작되었거나 종료된 룸입니다")
+    if room["host_id"] != user_id:
+        raise GameError("호스트만 게임을 시작할 수 있습니다", 403)
 
-    players = get_room_players(room_id)
-    game = get_game(room["game_type"])
-    seed = generate_seed()
+    game_type = room["game_type"]
+    if not is_supported(game_type):
+        raise GameError(f"백엔드가 지원하지 않는 게임입니다: {game_type}")
 
-    state = game.initial_state(
-        player_count=len(players),
-        seed=seed,
+    players = room_service.get_room_players(supabase, room_id)
+    if len(players) < 2:
+        raise GameError("최소 2명 이상이어야 시작할 수 있습니다")
+    if not all(p["ready"] for p in players):
+        raise GameError("모든 참가자가 준비해야 시작할 수 있습니다")
+
+    engine = get_engine(game_type)
+    initial_state = engine.init_state(
+        players=players,
         options=room.get("game_options") or {},
     )
 
-    # game_states INSERT (또는 UPSERT)
-    sb.table("game_states").upsert(
+    supabase.table("game_states").upsert(
         {
             "room_id": room_id,
-            "state": state,
-            "turn_number": 0,
-            "current_player_seat": 0,
-            "seed": seed,
-            "phase": "playing",
+            "state": initial_state,
+            "version": 1,
         }
     ).execute()
 
-    # rooms.status = 'playing'
-    sb.table("rooms").update({"status": "playing"}).eq("id", room_id).execute()
+    supabase.table("rooms").update({"status": "playing"}).eq("id", room_id).execute()
 
-    return {"seed": seed}
+    return {
+        "ok": True,
+        "room_id": room_id,
+        "game_type": game_type,
+    }
 
 
-def play_action(
+# ============================================================================
+# 액션 적용
+# ============================================================================
+
+
+def apply_action(
+    supabase: Client,
+    *,
     room_id: str,
-    requester_id: str,
-    action_type: str,
-    payload: dict[str, Any],
+    user_id: str,
+    action: dict[str, Any],
 ) -> dict[str, Any]:
-    """게임 액션 검증 + 적용."""
-    sb = get_supabase()
+    """
+    플레이어 액션 적용.
 
-    seat = get_player_seat(room_id, requester_id)
-    room = get_room(room_id)
-    game = get_game(room["game_type"])
+    검증:
+    - 룸 존재 + status='playing'
+    - 사용자가 해당 룸의 멤버
+    - 룰 엔진의 검증 (본인 차례, 액션 유효성 등)
 
-    state_res = (
-        sb.table("game_states").select("*").eq("room_id", room_id).single().execute()
+    동작:
+    1. 현재 game_states 조회
+    2. engine.apply_action(state, user_id, action) → 새 state
+    3. game_states UPDATE (version + 1)
+    4. game_actions INSERT (히스토리)
+    5. 종료 체크 → finished면 rooms.status='finished' + scores 저장
+
+    반환: { ok, state, version, finished, scores? }
+    """
+    # 1. 룸 + 멤버십 검증
+    room = room_service.get_room(supabase, room_id)
+    if not room:
+        raise GameError("존재하지 않는 룸입니다", 404)
+    if room["status"] != "playing":
+        raise GameError("진행 중인 게임이 아닙니다")
+    if not room_service.is_member(supabase, room_id, user_id):
+        raise GameError("이 룸의 멤버가 아닙니다", 403)
+
+    # 2. 게임 엔진 + 현재 상태
+    game_type = room["game_type"]
+    if not is_supported(game_type):
+        raise GameError(f"백엔드가 지원하지 않는 게임입니다: {game_type}")
+
+    engine = get_engine(game_type)
+
+    state_result = (
+        supabase.table("game_states")
+        .select("state, version")
+        .eq("room_id", room_id)
+        .maybe_single()
+        .execute()
     )
-    if not state_res.data:
-        raise GameNotFoundError("게임 상태가 없습니다.")
-    record = state_res.data
+    if not state_result or not state_result.data:
+        raise GameError("게임 상태가 없습니다", 404)
 
-    if record["current_player_seat"] != seat:
-        raise NotYourTurnError("당신 차례가 아닙니다.")
+    current_state = state_result.data["state"]
+    current_version = state_result.data["version"]
 
-    state = record["state"]
-    action = {"type": action_type, "payload": payload}
+    # 3. 룰 엔진 호출
+    try:
+        new_state = engine.apply_action(
+            current_state,
+            user_id=user_id,
+            action=action,
+        )
+    except InvalidActionError as e:
+        raise GameError(str(e), 400)
 
-    ok, reason = game.validate_action(state, action, seat)
-    if not ok:
-        raise InvalidActionError(reason or "액션이 유효하지 않습니다.")
-
-    new_state = game.apply_action(state, action, seat)
-    is_end = game.is_game_end(new_state)
-
-    # 액션 로그
-    sb.table("game_actions").insert(
-        {
-            "room_id": room_id,
-            "player_id": requester_id,
-            "turn_number": record["turn_number"],
-            "action_type": action_type,
-            "payload": payload,
-        }
-    ).execute()
-
-    # 상태 갱신
-    next_seat = new_state.get("currentSeat", seat)
-    sb.table("game_states").update(
+    # 4. game_states UPDATE
+    new_version = current_version + 1
+    supabase.table("game_states").update(
         {
             "state": new_state,
-            "turn_number": record["turn_number"] + 1,
-            "current_player_seat": next_seat,
-            "phase": "finished" if is_end else "playing",
+            "version": new_version,
         }
     ).eq("room_id", room_id).execute()
 
-    # 종료 처리
-    if is_end:
-        scores = game.calculate_score(new_state)
-        sb.table("rooms").update({"status": "finished"}).eq("id", room_id).execute()
-        return {"state_summary": _public_summary(new_state), "scores": scores, "ended": True}
+    # 5. game_actions INSERT (히스토리)
+    supabase.table("game_actions").insert(
+        {
+            "room_id": room_id,
+            "user_id": user_id,
+            "action": action,
+        }
+    ).execute()
 
-    return {"state_summary": _public_summary(new_state), "ended": False}
+    # 6. 종료 체크
+    finished = engine.is_finished(new_state)
+    scores: dict[str, int] | None = None
 
+    if finished:
+        scores = engine.get_scores(new_state)
 
-def get_private_state(room_id: str, requester_id: str) -> dict[str, Any]:
-    """본인의 비공개 정보 조회 (손패 등)."""
-    sb = get_supabase()
-    seat = get_player_seat(room_id, requester_id)
-    room = get_room(room_id)
-    game = get_game(room["game_type"])
+        # rooms 종료 처리
+        supabase.table("rooms").update(
+            {
+                "status": "finished",
+                "finished_at": "now()",
+            }
+        ).eq("id", room_id).execute()
 
-    state_res = (
-        sb.table("game_states").select("state").eq("room_id", room_id).single().execute()
-    )
-    if not state_res.data:
-        raise GameNotFoundError("게임 상태가 없습니다.")
+        # 최종 점수를 state에 보존 (결과 화면에서 사용)
+        final_state = {**new_state, "finalScores": scores}
+        supabase.table("game_states").update(
+            {"state": final_state, "version": new_version + 1}
+        ).eq("room_id", room_id).execute()
 
-    return game.extract_private_state(state_res.data["state"], seat)
+        new_state = final_state
+        new_version = new_version + 1
 
-
-def _public_summary(state: dict) -> dict:
-    """공개 가능한 상태 요약 (응답에 포함되는 정보)."""
-    # 비공개 필드 제거 등은 게임별로 처리. 여기서는 그대로 반환.
-    return state
+    return {
+        "ok": True,
+        "state": new_state,
+        "version": new_version,
+        "finished": finished,
+        "scores": scores,
+    }

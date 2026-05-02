@@ -1,12 +1,17 @@
-"""게임 액션 / 시작 / 비공개 정보 라우터."""
-from fastapi import APIRouter, HTTPException
+"""
+게임 관련 엔드포인트.
 
-from app.core.exceptions import RollupException
-from app.deps import CurrentUser
-from app.schemas.action import (
+- POST /api/games/start: 게임 시작 (호스트)
+- POST /api/games/action: 액션 적용 (멤버)
+"""
+
+from fastapi import APIRouter, Depends
+from supabase import Client
+
+from app.deps import get_current_user_id, get_supabase
+from app.schemas.game import (
     ActionRequest,
     ActionResponse,
-    PrivateInfoResponse,
     StartGameRequest,
     StartGameResponse,
 )
@@ -16,29 +21,39 @@ router = APIRouter()
 
 
 @router.post("/start", response_model=StartGameResponse)
-async def start_game(req: StartGameRequest, user: CurrentUser):
+def start_game(
+    body: StartGameRequest,
+    user_id: str = Depends(get_current_user_id),
+    supabase: Client = Depends(get_supabase),
+):
+    """호스트가 게임 시작."""
     try:
-        result = game_service.start_game(req.room_id, user.id)
-        return StartGameResponse(success=True, seed=result["seed"])
-    except RollupException as e:
-        raise HTTPException(status_code=e.status, detail={"error": e.code, "reason": str(e)})
+        result = game_service.start_game(
+            supabase,
+            room_id=body.room_id,
+            user_id=user_id,
+        )
+    except game_service.GameError as err:
+        raise game_service.game_error_to_http(err)
+
+    return result
 
 
 @router.post("/action", response_model=ActionResponse)
-async def play_action(req: ActionRequest, user: CurrentUser):
+def apply_action(
+    body: ActionRequest,
+    user_id: str = Depends(get_current_user_id),
+    supabase: Client = Depends(get_supabase),
+):
+    """플레이어가 게임 액션 적용."""
     try:
-        result = game_service.play_action(
-            req.room_id, user.id, req.action_type, req.payload
+        result = game_service.apply_action(
+            supabase,
+            room_id=body.room_id,
+            user_id=user_id,
+            action=body.action,
         )
-        return ActionResponse(success=True, state_summary=result["state_summary"])
-    except RollupException as e:
-        raise HTTPException(status_code=e.status, detail={"error": e.code, "reason": str(e)})
+    except game_service.GameError as err:
+        raise game_service.game_error_to_http(err)
 
-
-@router.get("/private/{room_id}", response_model=PrivateInfoResponse)
-async def get_private(room_id: str, user: CurrentUser):
-    try:
-        private = game_service.get_private_state(room_id, user.id)
-        return PrivateInfoResponse(room_id=room_id, private_state=private)
-    except RollupException as e:
-        raise HTTPException(status_code=e.status, detail={"error": e.code, "reason": str(e)})
+    return result

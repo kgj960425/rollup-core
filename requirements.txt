@@ -1,9 +1,24 @@
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-pydantic>=2.9.0
-pydantic-settings>=2.5.0
-supabase>=2.9.0
-pyjwt>=2.9.0
-python-dotenv>=1.0.0
-httpx>=0.27.0
-slowapi>=0.1.9
+# Rollup 백엔드 의존성
+
+# 웹 프레임워크
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+
+# Supabase 클라이언트
+supabase==2.7.4
+
+# 환경 변수
+python-dotenv==1.0.1
+
+# JWT 검증 (Supabase access_token)
+# crypto extra: ES256/RS256 등 비대칭 알고리즘 지원 (Supabase 신규 표준)
+PyJWT[crypto]==2.9.0
+
+# Pydantic (FastAPI가 요구)
+pydantic==2.9.2
+pydantic-settings==2.5.2
+
+# 개발 / 테스트
+pytest==8.3.3
+pytest-asyncio==0.24.0
+httpx==0.27.2

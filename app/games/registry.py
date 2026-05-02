@@ -1,26 +1,36 @@
-"""게임 등록소.
-
-새 게임 추가 시 여기에 등록.
 """
-from app.core.exceptions import UnknownGameTypeError
+게임 ID → 룰 엔진 매핑.
 
-# v1 개발 시점에 활성화. 지금은 빈 dict.
-# from app.games import lexio, splendor, splendor_pokemon, splendor_duel
+새 게임 추가 시:
+1. app/games/<game_id>/engine.py 작성 (GameEngine 상속)
+2. 이 파일의 ENGINES dict에 등록
+"""
 
-GAMES: dict = {
-    # 'lexio': lexio,
-    # 'splendor': splendor,
-    # 'splendor-pokemon': splendor_pokemon,
-    # 'splendor-duel': splendor_duel,
+from app.games.base import GameEngine
+from app.games.dummy.engine import DummyEngine
+
+# 등록된 게임 엔진들
+ENGINES: dict[str, GameEngine] = {
+    DummyEngine.GAME_ID: DummyEngine(),
+    # Step 7+: YachtEngine, LexioEngine, SplendorEngine, ...
 }
 
 
-def get_game(game_type: str):
-    """게임 모듈 조회. 없으면 예외."""
-    if game_type not in GAMES:
-        raise UnknownGameTypeError(f"등록되지 않은 게임: {game_type}")
-    return GAMES[game_type]
+def get_engine(game_id: str) -> GameEngine:
+    """
+    게임 ID로 룰 엔진 조회.
+    없으면 KeyError.
+    """
+    if game_id not in ENGINES:
+        raise KeyError(f"등록되지 않은 게임: {game_id}")
+    return ENGINES[game_id]
 
 
-def list_games() -> list[str]:
-    return list(GAMES.keys())
+def is_supported(game_id: str) -> bool:
+    """백엔드가 지원하는 게임인지."""
+    return game_id in ENGINES
+
+
+def list_supported_games() -> list[str]:
+    """지원 게임 ID 목록."""
+    return list(ENGINES.keys())
